@@ -1,0 +1,131 @@
+// Service sketch from the design doc. A starting point for aligning the
+// interfaces with the backend, not the contract.
+syntax = "proto3";
+
+package rumble.v1;
+
+enum DeckMode {
+  DECK_MODE_UNSPECIFIED = 0;
+  DECK_MODE_COOK = 1;
+  DECK_MODE_SHOP = 2;
+}
+
+enum SwipeDirection {
+  SWIPE_DIRECTION_UNSPECIFIED = 0;
+  SWIPE_DIRECTION_YES = 1;
+  SWIPE_DIRECTION_NO = 2;
+}
+
+message DeckRequest {
+  DeckMode mode = 1;
+  // Open question: streamed vs paged, and how many cards per request.
+  int32 limit = 2;
+}
+
+message DishCard {
+  string id = 1;
+  string title = 2;
+  string summary = 3;
+  // Photos stay on a CDN; messages carry a URL and a small blurred placeholder.
+  string image_url = 4;
+  bytes image_placeholder = 5;
+  int32 minutes = 6;
+  repeated string missing_ingredients = 7;
+}
+
+message Swipe {
+  string dish_id = 1;
+  SwipeDirection direction = 2;
+  int64 swiped_at_unix_ms = 3;
+}
+
+message SwipeAck {}
+
+message MatchRequest {
+  string dish_id = 1;
+}
+
+message Match {
+  DishCard dish = 1;
+}
+
+message RecipeId {
+  string id = 1;
+}
+
+message Ingredient {
+  string name = 1;
+  string amount = 2;
+}
+
+message RecipeStep {
+  string instruction = 1;
+  // Zero means the step has no timer.
+  int32 timer_seconds = 2;
+}
+
+message Recipe {
+  string id = 1;
+  string title = 2;
+  string summary = 3;
+  string image_url = 4;
+  int32 minutes = 5;
+  repeated Ingredient ingredients = 6;
+  repeated RecipeStep steps = 7;
+}
+
+message PlanRequest {
+  repeated string dish_ids = 1;
+}
+
+message Plan {
+  string id = 1;
+  repeated DishCard dishes = 2;
+}
+
+message PlanId {
+  string id = 1;
+}
+
+message ShoppingItem {
+  string id = 1;
+  string name = 2;
+  string amount = 3;
+}
+
+message ShoppingList {
+  string plan_id = 1;
+  repeated ShoppingItem items = 2;
+}
+
+message PantryItem {
+  string id = 1;
+  string name = 2;
+  string amount = 3;
+}
+
+message PantryChange {
+  oneof change {
+    PantryItem upsert = 1;
+    string remove_id = 2;
+  }
+}
+
+service DeckService {
+  rpc StreamDeck(DeckRequest) returns (stream DishCard);
+  rpc RecordSwipe(Swipe) returns (SwipeAck);
+  rpc GetMatch(MatchRequest) returns (Match);
+}
+
+service RecipeService {
+  rpc GetRecipe(RecipeId) returns (Recipe);
+}
+
+service PlanService {
+  rpc BuildPlan(PlanRequest) returns (Plan);
+  rpc GetShoppingList(PlanId) returns (ShoppingList);
+}
+
+service PantryService {
+  rpc SyncPantry(stream PantryChange) returns (stream PantryChange);
+}

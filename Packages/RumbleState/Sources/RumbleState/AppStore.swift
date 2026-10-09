@@ -19,13 +19,15 @@ public final class AppStore {
     public var errorMessage: String?
 
     @ObservationIgnored private let services: AppServices
+    @ObservationIgnored private let outbox: SwipeOutbox
 
     public init(services: AppServices) {
         self.services = services
-        let outbox = SwipeOutbox(deck: services.deck)
+        let outbox = SwipeOutbox(deck: services.deck, storage: services.swipeQueue)
+        self.outbox = outbox
         cookDeck = DeckStore(mode: .cook, deck: services.deck, outbox: outbox)
         shopDeck = DeckStore(mode: .shop, deck: services.deck, outbox: outbox)
-        plan = PlanStore(plans: services.plans, pantry: services.pantry)
+        plan = PlanStore(plans: services.plans, pantry: services.pantry, persistence: services.shoppingPersistence)
 
         cookDeck.onAccept = { [weak self] dish in self?.match = dish }
         shopDeck.onAccept = { [weak self] dish in self?.plan.add(dish) }
@@ -34,6 +36,8 @@ public final class AppStore {
     public func start() async {
         cookDeck.start()
         await loadPantry()
+        await plan.restore()
+        await outbox.restore()
     }
 
     public func loadPantry() async {
@@ -49,7 +53,12 @@ public final class AppStore {
         let recipes = services.recipes
         do {
             let recipe = try await withRetry { try await recipes.recipe(id: dish.id) }
-            cooking = CookingStore(recipe: recipe, pantry: services.pantry, notifier: services.notifier)
+            cooking = CookingStore(
+                recipe: recipe,
+                pantry: services.pantry,
+                notifier: services.notifier,
+                activities: services.activities
+            )
             match = nil
         } catch {
             errorMessage = error.rumbleUserMessage

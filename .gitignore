@@ -4,3 +4,5 @@
 *.xcodeproj
 xcuserdata/
 DerivedData/
+Rumble/Info.plist
+RumbleWidgets/Info.plist

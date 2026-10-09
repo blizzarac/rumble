@@ -14,14 +14,27 @@ public final class PlanStore {
 
     @ObservationIgnored private let plans: any PlanService
     @ObservationIgnored private let pantry: any PantryService
+    @ObservationIgnored private let persistence: (any ShoppingListPersistence)?
 
-    public init(plans: any PlanService, pantry: any PantryService, targetCount: Int = 3) {
+    public init(
+        plans: any PlanService,
+        pantry: any PantryService,
+        persistence: (any ShoppingListPersistence)? = nil,
+        targetCount: Int = 3
+    ) {
         self.plans = plans
         self.pantry = pantry
+        self.persistence = persistence
         self.targetCount = targetCount
     }
 
     public var checkedCount: Int { shoppingList?.items.filter(\.isChecked).count ?? 0 }
+
+    /// Brings back the list saved by a previous launch, so it is still there in the shop.
+    public func restore() async {
+        guard shoppingList == nil, let saved = try? await persistence?.loadShoppingList() else { return }
+        shoppingList = saved
+    }
 
     /// Adds a dinner; builds the plan once the target count is reached.
     public func add(_ dish: Dish) {
@@ -44,6 +57,7 @@ public final class PlanStore {
                 let plan = try await plans.buildPlan(dishIDs: ids)
                 return try await plans.shoppingList(planID: plan.id)
             }
+            persist()
         } catch {
             errorMessage = error.rumbleUserMessage
         }
@@ -52,6 +66,13 @@ public final class PlanStore {
     public func toggle(itemID: String) {
         guard let index = shoppingList?.items.firstIndex(where: { $0.id == itemID }) else { return }
         shoppingList?.items[index].isChecked.toggle()
+        persist()
+    }
+
+    private func persist() {
+        guard let persistence else { return }
+        let list = shoppingList
+        Task { try? await persistence.saveShoppingList(list) }
     }
 
     /// Shopping fills the pantry: everything ticked off goes into it, then the plan resets.
@@ -62,6 +83,7 @@ public final class PlanStore {
             try await pantry.apply(changes)
             selected = []
             shoppingList = nil
+            persist()
         } catch {
             errorMessage = error.rumbleUserMessage
         }

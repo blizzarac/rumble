@@ -170,3 +170,45 @@ private func waitUntil(_ condition: () -> Bool) async {
         #expect(store.plan.selected.count == 1)
     }
 }
+
+@MainActor
+final class RecordingActivities: CookingActivityController {
+    private(set) var updates: [[TimerSnapshot]] = []
+    private(set) var endCount = 0
+    func update(recipeTitle: String, timers: [TimerSnapshot]) { updates.append(timers) }
+    func end() { endCount += 1 }
+}
+
+@MainActor @Suite struct LiveActivitySyncTests {
+    @Test func timersAreMirroredAndActivityEndsWhenNoneLeft() {
+        let activities = RecordingActivities()
+        let store = CookingStore(
+            recipe: SampleData.recipes[0], pantry: InMemoryPantryService(),
+            notifier: RecordingNotifier(), activities: activities, now: { Date(timeIntervalSince1970: 0) }
+        )
+        store.startTimer(for: store.recipe.steps[0])
+        store.startTimer(for: store.recipe.steps[1])
+        #expect(activities.updates.last?.count == 2)
+
+        store.cancelTimer(id: store.timers[0].id)
+        #expect(activities.updates.last?.count == 1)
+        store.cancelTimer(id: store.timers[0].id)
+        #expect(activities.endCount == 1)
+    }
+}
+
+@MainActor @Suite struct PersistenceWiringTests {
+    @Test func shoppingListIsRestoredAfterRelaunch() async throws {
+        let container = try RumbleStorage.makeContainer(inMemory: true)
+        let local = SwiftDataLocalStore(modelContainer: container)
+
+        let first = PlanStore(plans: FakePlanService(), pantry: InMemoryPantryService(), persistence: local, targetCount: 1)
+        first.add(SampleData.dishes.first { $0.id == "fried-rice" }!)
+        await waitUntil { first.shoppingList != nil }
+        try? await Task.sleep(for: .milliseconds(50))  // let the save land
+
+        let second = PlanStore(plans: FakePlanService(), pantry: InMemoryPantryService(), persistence: local, targetCount: 1)
+        await second.restore()
+        #expect(second.shoppingList == first.shoppingList)
+    }
+}

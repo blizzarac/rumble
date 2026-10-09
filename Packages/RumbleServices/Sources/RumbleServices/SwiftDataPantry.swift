@@ -15,10 +15,13 @@ public final class PantryRecord {
 }
 
 public enum RumbleStorage {
-    /// TODO: add the recipe cache, the shopping list and the swipe queue to this schema.
+    /// One container for everything stored on the device.
     public static func makeContainer(inMemory: Bool = false) throws -> ModelContainer {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: inMemory)
-        return try ModelContainer(for: PantryRecord.self, configurations: configuration)
+        return try ModelContainer(
+            for: PantryRecord.self, RecipeRecord.self, ShoppingListRecord.self, SwipeRecord.self,
+            configurations: configuration
+        )
     }
 }
 

@@ -1,20 +1,30 @@
 import Foundation
 
 /// Queues swipes and sends them in order; keeps them queued while the backend is unreachable.
-///
-/// TODO: persist the queue in SwiftData so it survives a relaunch (in memory for now).
+/// With a storage the queue survives a relaunch.
 public actor SwipeOutbox {
     private let deck: any DeckService
+    private let storage: (any SwipeQueueStorage)?
     private var pending: [Swipe] = []
     private var isFlushing = false
 
-    public init(deck: any DeckService) {
+    public init(deck: any DeckService, storage: (any SwipeQueueStorage)? = nil) {
         self.deck = deck
+        self.storage = storage
     }
 
     public var pendingCount: Int { pending.count }
 
+    /// Loads swipes left over from a previous launch and sends them. Call once at startup.
+    public func restore() async {
+        if pending.isEmpty, let stored = try? await storage?.pendingSwipes() {
+            pending = stored
+        }
+        await flush()
+    }
+
     public func enqueue(_ swipe: Swipe) async {
+        try? await storage?.appendSwipe(swipe)
         pending.append(swipe)
         await flush()
     }
@@ -28,6 +38,7 @@ public actor SwipeOutbox {
             do {
                 try await deck.recordSwipe(next)
                 pending.removeFirst()
+                try? await storage?.removeOldestSwipe()
             } catch {
                 return
             }

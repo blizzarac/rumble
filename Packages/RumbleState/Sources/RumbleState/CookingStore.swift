@@ -31,17 +31,20 @@ public final class CookingStore {
 
     @ObservationIgnored private let pantry: any PantryService
     @ObservationIgnored private let notifier: any TimerNotifier
+    @ObservationIgnored private let activities: (any CookingActivityController)?
     @ObservationIgnored private let now: @Sendable () -> Date
 
     public init(
         recipe: Recipe,
         pantry: any PantryService,
         notifier: any TimerNotifier,
+        activities: (any CookingActivityController)? = nil,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.recipe = recipe
         self.pantry = pantry
         self.notifier = notifier
+        self.activities = activities
         self.now = now
     }
 
@@ -68,11 +71,13 @@ public final class CookingStore {
         timers.removeAll { $0.id == id }
         timers.append(timer)
         notifier.schedule(id: id, title: "\(recipe.title): timer done", fireDate: timer.endDate)
+        syncActivity()
     }
 
     public func cancelTimer(id: String) {
         timers.removeAll { $0.id == id }
         notifier.cancel(id: id)
+        syncActivity()
     }
 
     /// Cooking empties the pantry: the used ingredients are removed.
@@ -80,8 +85,22 @@ public final class CookingStore {
     public func finish() async {
         for timer in timers { notifier.cancel(id: timer.id) }
         timers = []
+        syncActivity()
         try? await pantry.apply(recipe.ingredients.map { .remove(id: $0.id) })
         isFinished = true
+    }
+
+    /// Mirrors the running timers to the Lock Screen / Dynamic Island; ends the activity when none are left.
+    private func syncActivity() {
+        guard let activities else { return }
+        if timers.isEmpty {
+            activities.end()
+        } else {
+            activities.update(
+                recipeTitle: recipe.title,
+                timers: timers.map { TimerSnapshot(id: $0.id, label: $0.label, endDate: $0.endDate) }
+            )
+        }
     }
 
     private func timerID(for step: RecipeStep) -> String { "\(recipe.id)-step-\(step.id)" }

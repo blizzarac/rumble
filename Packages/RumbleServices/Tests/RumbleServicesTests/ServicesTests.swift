@@ -134,3 +134,153 @@ private actor FlakyDeck: DeckService {
         #expect(try await pantry.items().count == SampleData.pantry.count)
     }
 }
+
+// MARK: - Auth, deadlines, persistence
+
+private actor CountingRefresher: TokenRefresher {
+    private(set) var calls = 0
+    let result: Result<AuthToken, ServiceError>
+
+    init(_ result: Result<AuthToken, ServiceError>) { self.result = result }
+
+    func refresh(refreshToken: String) async throws -> AuthToken {
+        calls += 1
+        try await Task.sleep(for: .milliseconds(30))
+        return try result.get()
+    }
+}
+
+private let fixedNow = Date(timeIntervalSince1970: 10_000)
+private func token(_ access: String, expiresIn: TimeInterval) -> AuthToken {
+    AuthToken(accessToken: access, refreshToken: "r-\(access)", expiresAt: fixedNow.addingTimeInterval(expiresIn))
+}
+
+@Suite struct AuthTests {
+    @Test func validTokenIsReturnedWithoutRefresh() async throws {
+        let refresher = CountingRefresher(.success(token("new", expiresIn: 3600)))
+        let session = AuthSession(store: InMemoryTokenStore(token: token("old", expiresIn: 600)), refresher: refresher, now: { fixedNow })
+        #expect(try await session.accessToken() == "old")
+        #expect(await refresher.calls == 0)
+    }
+
+    @Test func expiringTokenIsRefreshedOnceForConcurrentCallers() async throws {
+        let refresher = CountingRefresher(.success(token("new", expiresIn: 3600)))
+        let store = InMemoryTokenStore(token: token("old", expiresIn: 5))
+        let session = AuthSession(store: store, refresher: refresher, now: { fixedNow })
+        async let a = session.accessToken()
+        async let b = session.accessToken()
+        async let c = session.accessToken()
+        let results = try await [a, b, c]
+        #expect(results == ["new", "new", "new"])
+        #expect(await refresher.calls == 1)
+        #expect(await store.load()?.accessToken == "new")
+    }
+
+    @Test func rejectedRefreshTokenSignsOut() async {
+        let refresher = CountingRefresher(.failure(.unauthenticated))
+        let store = InMemoryTokenStore(token: token("old", expiresIn: -1))
+        let session = AuthSession(store: store, refresher: refresher, now: { fixedNow })
+        await #expect(throws: ServiceError.unauthenticated) { try await session.accessToken() }
+        #expect(await store.load() == nil)
+    }
+
+    @Test func withAuthRefreshesOnceOnUnauthenticatedAndRetries() async throws {
+        let refresher = CountingRefresher(.success(token("new", expiresIn: 3600)))
+        let session = AuthSession(store: InMemoryTokenStore(token: token("old", expiresIn: 600)), refresher: refresher, now: { fixedNow })
+        let used = try await withAuth(session) { accessToken -> String in
+            if accessToken == "old" { throw ServiceError.unauthenticated }
+            return accessToken
+        }
+        #expect(used == "new")
+        #expect(await refresher.calls == 1)
+    }
+}
+
+@Suite struct DeadlineTests {
+    @Test func slowOperationTimesOut() async {
+        await #expect(throws: ServiceError.deadlineExceeded) {
+            try await withDeadline(.milliseconds(30)) {
+                try await Task.sleep(for: .seconds(5))
+                return 1
+            }
+        }
+    }
+
+    @Test func fastOperationReturns() async throws {
+        let value = try await withDeadline(.seconds(5)) { 42 }
+        #expect(value == 42)
+    }
+
+    @Test func pipelineRetriesTimeoutsThenSucceeds() async throws {
+        let session = AuthSession(store: InMemoryTokenStore(token: token("t", expiresIn: 600)), refresher: CountingRefresher(.failure(.unauthenticated)), now: { fixedNow })
+        let pipeline = CallPipeline(auth: session, retry: RetryPolicy(maxAttempts: 3, baseDelay: .milliseconds(1), multiplier: 1))
+        let calls = Counter()
+        let result = try await pipeline.run(deadline: .milliseconds(50)) { accessToken in
+            if calls.increment() == 1 { try await Task.sleep(for: .seconds(5)) }
+            return accessToken
+        }
+        #expect(result == "t")
+        #expect(calls.current == 2)
+    }
+}
+
+@Suite struct LocalStoreTests {
+    private func makeStore() throws -> SwiftDataLocalStore {
+        SwiftDataLocalStore(modelContainer: try RumbleStorage.makeContainer(inMemory: true))
+    }
+
+    @Test func recipeCacheRoundTrips() async throws {
+        let store = try makeStore()
+        let recipe = SampleData.recipes[0]
+        #expect(try await store.cachedRecipe(id: recipe.id) == nil)
+        try await store.cache(recipe)
+        #expect(try await store.cachedRecipe(id: recipe.id) == recipe)
+    }
+
+    @Test func shoppingListRoundTripsAndClears() async throws {
+        let store = try makeStore()
+        let list = ShoppingList(planID: "p", items: [ShoppingItem(id: "soy sauce", name: "Soy sauce", amount: "2 tbsp", isChecked: true)])
+        try await store.saveShoppingList(list)
+        #expect(try await store.loadShoppingList() == list)
+        try await store.saveShoppingList(nil)
+        #expect(try await store.loadShoppingList() == nil)
+    }
+
+    @Test func swipeQueueKeepsOrder() async throws {
+        let store = try makeStore()
+        try await store.appendSwipe(Swipe(dishID: "a", direction: .yes, date: .now))
+        try await store.appendSwipe(Swipe(dishID: "b", direction: .no, date: .now))
+        try await store.removeOldestSwipe()
+        #expect(try await store.pendingSwipes().map(\.dishID) == ["b"])
+    }
+
+    @Test func outboxSurvivesRelaunch() async throws {
+        let store = try makeStore()
+        let offline = FlakyDeck()
+        let first = SwipeOutbox(deck: offline, storage: store)
+        await first.enqueue(Swipe(dishID: "a", direction: .yes, date: .now))
+        #expect(await first.pendingCount == 1)
+
+        // New launch, backend reachable again.
+        let online = FlakyDeck()
+        await online.setOnline(true)
+        let second = SwipeOutbox(deck: online, storage: store)
+        await second.restore()
+        #expect(await online.received == ["a"])
+        #expect(try await store.pendingSwipes().isEmpty)
+    }
+
+    @Test func cachingRecipeServiceServesCacheWhenRemoteIsDown() async throws {
+        struct DownRemote: RecipeService {
+            func recipe(id: String) async throws -> Recipe { throw ServiceError.unavailable }
+        }
+        let store = try makeStore()
+        let recipe = SampleData.recipes[1]
+        let warm = CachingRecipeService(remote: FakeRecipeService(), cache: store)
+        _ = try await warm.recipe(id: recipe.id)
+
+        let offline = CachingRecipeService(remote: DownRemote(), cache: store)
+        #expect(try await offline.recipe(id: recipe.id) == recipe)
+        await #expect(throws: ServiceError.unavailable) { try await offline.recipe(id: "never-cached") }
+    }
+}

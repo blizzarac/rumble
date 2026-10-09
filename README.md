@@ -20,7 +20,11 @@ Layers only talk downwards: views → stores → services → proto. Only the se
 Written on a Linux machine with **no Swift toolchain, so none of it has been compiled or run yet**. Expect a round of small compile fixes (Swift 6 strict concurrency especially).
 
 Done:
-- All four packages, the app target and the XcodeGen spec
+- All four packages, the app target, a widget extension and the XcodeGen spec
+- GitHub Actions CI on macOS (package tests, app build for the simulator, proto generation), so compile errors show up on every push
+- Live Activity for running cooking timers (Lock Screen and Dynamic Island), mirrored from `CookingStore`
+- Auth plumbing: `AuthSession` (token refresh shared between concurrent callers, keychain store), `withDeadline` (2 s swipes, 5 s other calls), and `CallPipeline` combining auth, deadline and retry for the gRPC adapters to use
+- SwiftData persistence for the pantry, recipe cache, shopping list and swipe queue (swipes survive a relaunch and are sent on the next start)
 - Cook flow end to end on fake data: swipe deck → match → step-by-step cooking → pantry updated
 - Shop flow: swipe three dinners → shopping list → tick items → pantry filled
 - Retry with exponential backoff, offline swipe outbox, iPad layouts, keyboard shortcuts, VoiceOver actions
@@ -28,9 +32,8 @@ Done:
 
 Not done:
 - **gRPC adapters.** `RumbleProto` has the sketch protos and plugin setup but nothing implements `DeckService` etc. on top of it yet. The app runs on the fakes.
-- Auth interceptor (token as metadata, refresh on `unauthenticated`), keepalive, per-call deadlines (2 s swipes, 5 s recipes/plans)
-- Live Activity (needs a Widget Extension target with `ActivityKit` attributes; `NSSupportsLiveActivities` is already set)
-- Persist the swipe queue, recipe cache and shopping list in SwiftData (only the pantry is persisted)
+- The gRPC interceptor that puts `AuthSession`'s token in call metadata, and keepalive pings (every ~30 s)
+- A real sign-in flow and `TokenRefresher` (token type and lifetime still to agree with the backend)
 - Image cache (URLSession + disk), "record as cooked" / taste profile, bidirectional pantry sync
 - App icon, real bundle identifier and signing team
 - UI tests for the two core flows
@@ -40,6 +43,7 @@ Not done:
 ```sh
 brew install xcodegen protobuf
 # 1. Check the packages build and the tests pass
+# (or just push: CI runs the same checks and reports compile errors)
 for p in RumbleServices RumbleState; do (cd Packages/$p && swift test); done
 # 2. Check the proto package resolves and generates (verifies package versions and the plugin config)
 (cd Packages/RumbleProto && swift build)

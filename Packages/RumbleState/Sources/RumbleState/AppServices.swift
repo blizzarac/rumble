@@ -8,19 +8,28 @@ public struct AppServices {
     public var plans: any PlanService
     public var pantry: any PantryService
     public var notifier: any TimerNotifier
+    public var activities: (any CookingActivityController)?
+    public var swipeQueue: (any SwipeQueueStorage)?
+    public var shoppingPersistence: (any ShoppingListPersistence)?
 
     public init(
         deck: any DeckService,
         recipes: any RecipeService,
         plans: any PlanService,
         pantry: any PantryService,
-        notifier: any TimerNotifier
+        notifier: any TimerNotifier,
+        activities: (any CookingActivityController)? = nil,
+        swipeQueue: (any SwipeQueueStorage)? = nil,
+        shoppingPersistence: (any ShoppingListPersistence)? = nil
     ) {
         self.deck = deck
         self.recipes = recipes
         self.plans = plans
         self.pantry = pantry
         self.notifier = notifier
+        self.activities = activities
+        self.swipeQueue = swipeQueue
+        self.shoppingPersistence = shoppingPersistence
     }
 
     @MainActor

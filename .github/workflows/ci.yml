@@ -35,6 +35,26 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO
 
+  ui-tests:
+    name: UI tests (${{ matrix.device }})
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        device: ["iPhone 16", "iPad Pro 13-inch (M4)"]
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen
+      - run: xcodegen generate
+      - name: Test
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project Rumble.xcodeproj \
+            -scheme Rumble \
+            -destination 'platform=iOS Simulator,name=${{ matrix.device }}' \
+            CODE_SIGNING_ALLOWED=NO
+
   proto:
     name: Proto package (generates gRPC code)
     runs-on: macos-15

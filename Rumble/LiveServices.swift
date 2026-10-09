@@ -1,3 +1,4 @@
+import Foundation
 import RumbleServices
 import RumbleState
 
@@ -6,6 +7,10 @@ extension AppServices {
     /// the fakes until the gRPC adapters over RumbleProto exist (they will be built on `CallPipeline`).
     @MainActor
     static func live() -> AppServices {
+        // UI tests run on fakes with nothing stored on the device.
+        if ProcessInfo.processInfo.arguments.contains("-ui-testing") {
+            return AppServices.fake(streamDelay: .milliseconds(10))
+        }
         var services = AppServices.fake()
         do {
             let container = try RumbleStorage.makeContainer()

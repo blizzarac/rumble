@@ -41,6 +41,16 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.example.rumble
+  RumbleUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [RumbleUITests]
+    dependencies:
+      - target: Rumble
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.rumble.uitests
+        GENERATE_INFOPLIST_FILE: YES
   RumbleWidgets:
     type: app-extension
     platform: iOS
@@ -56,3 +66,10 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.example.rumble.widgets
+schemes:
+  Rumble:
+    build:
+      targets:
+        Rumble: all
+    test:
+      targets: [RumbleUITests]

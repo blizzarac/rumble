@@ -46,7 +46,7 @@ brew install xcodegen protobuf
 # (or just push: CI runs the same checks and reports compile errors)
 for p in RumbleServices RumbleState; do (cd Packages/$p && swift test); done
 # 2. Check the proto package resolves and generates (verifies package versions and the plugin config)
-(cd Packages/RumbleProto && swift build)
+(cd Packages/RumbleProto && PROTOC_PATH=$(which protoc) swift build)
 # 3. Generate and open the app
 xcodegen generate && open Rumble.xcodeproj
 ```

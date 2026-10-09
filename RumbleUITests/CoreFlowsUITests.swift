@@ -2,8 +2,9 @@ import XCTest
 
 /// The two core flows from the design doc: swipe → match → cook, and swipe → plan → list.
 /// The app runs on fake services with an in-memory store when launched with `-ui-testing`.
+@MainActor
 final class CoreFlowsUITests: XCTestCase {
-    override func setUp() {
+    override func setUpWithError() throws {
         continueAfterFailure = false
     }
 

@@ -81,6 +81,9 @@ jobs:
         working-directory: Packages/RumbleProto
         # The build plugin only runs protoc from PROTOC_PATH.
         run: PROTOC_PATH=$(which protoc) swift build
+      - name: Test
+        working-directory: Packages/RumbleProto
+        run: PROTOC_PATH=$(which protoc) swift test
       - name: Show generated API (for writing the adapters)
         if: always()
         working-directory: Packages/RumbleProto

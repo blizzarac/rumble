@@ -13,6 +13,7 @@ let package = Package(
         .library(name: "RumbleProto", targets: ["RumbleProto"]),
     ],
     dependencies: [
+        .package(path: "../RumbleServices"),
         .package(url: "https://github.com/grpc/grpc-swift.git", from: "2.0.0"),
         .package(url: "https://github.com/grpc/grpc-swift-protobuf.git", from: "1.0.0"),
         .package(url: "https://github.com/grpc/grpc-swift-nio-transport.git", from: "1.0.0"),
@@ -22,6 +23,7 @@ let package = Package(
         .target(
             name: "RumbleProto",
             dependencies: [
+                "RumbleServices",
                 .product(name: "GRPCCore", package: "grpc-swift"),
                 .product(name: "GRPCProtobuf", package: "grpc-swift-protobuf"),
                 .product(name: "GRPCNIOTransportHTTP2", package: "grpc-swift-nio-transport"),
@@ -31,5 +33,6 @@ let package = Package(
                 .plugin(name: "GRPCProtobufGenerator", package: "grpc-swift-protobuf"),
             ]
         ),
+        .testTarget(name: "RumbleProtoTests", dependencies: ["RumbleProto", "RumbleServices"]),
     ]
 )

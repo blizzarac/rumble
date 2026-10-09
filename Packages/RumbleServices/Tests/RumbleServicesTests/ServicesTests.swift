@@ -113,7 +113,8 @@ private actor FlakyDeck: DeckService {
         var seen: [Dish] = []
         for try await dish in deck.streamDeck(mode: .cook) { seen.append(dish) }
         #expect(!seen.isEmpty)
-        #expect(seen.allSatisfy(\.canCookNow))
+        let allCookable = seen.allSatisfy { $0.canCookNow }
+        #expect(allCookable)
     }
 }
 

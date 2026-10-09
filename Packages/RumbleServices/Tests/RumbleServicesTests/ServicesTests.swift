@@ -285,3 +285,51 @@ private func token(_ access: String, expiresIn: TimeInterval) -> AuthToken {
         await #expect(throws: ServiceError.unavailable) { try await offline.recipe(id: "never-cached") }
     }
 }
+
+// MARK: - Image cache
+
+private final class StubURLProtocol: URLProtocol, @unchecked Sendable {
+    nonisolated(unsafe) static var requestCount = 0
+    private static let lock = NSLock()
+
+    static func reset() { lock.lock(); requestCount = 0; lock.unlock() }
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        Self.lock.lock(); Self.requestCount += 1; Self.lock.unlock()
+        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data("photo".utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
+@Suite(.serialized) struct ImageCacheTests {
+    private func makeCache() -> ImageCache {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [StubURLProtocol.self]
+        StubURLProtocol.reset()
+        return ImageCache(session: URLSession(configuration: configuration))
+    }
+
+    @Test func secondRequestIsServedFromMemory() async throws {
+        let cache = makeCache()
+        let url = URL(string: "https://cdn.example.com/a.jpg")!
+        #expect(try await cache.data(for: url) == Data("photo".utf8))
+        _ = try await cache.data(for: url)
+        #expect(StubURLProtocol.requestCount == 1)
+    }
+
+    @Test func concurrentRequestsShareOneDownload() async throws {
+        let cache = makeCache()
+        let url = URL(string: "https://cdn.example.com/b.jpg")!
+        async let a = cache.data(for: url)
+        async let b = cache.data(for: url)
+        _ = try await (a, b)
+        #expect(StubURLProtocol.requestCount == 1)
+    }
+}

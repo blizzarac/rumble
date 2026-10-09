@@ -43,12 +43,7 @@ struct DishCardView: View {
     @ViewBuilder
     private var photo: some View {
         if let url = dish.imageURL {
-            // TODO: replace with the URLSession + on-disk image cache from the design doc.
-            AsyncImage(url: url) { image in
-                image.resizable().scaledToFill()
-            } placeholder: {
-                fallback
-            }
+            RemoteImage(url: url) { fallback }
         } else {
             fallback
         }

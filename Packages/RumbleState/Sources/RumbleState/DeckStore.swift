@@ -62,6 +62,7 @@ public final class DeckStore {
                     try await Task.sleep(for: .milliseconds(150))
                 }
                 cards.append(dish)
+                if let url = dish.imageURL { Task { await ImageCache.shared.prefetch([url]) } }
             }
             isExhausted = true
         } catch is CancellationError {

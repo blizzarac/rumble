@@ -12,6 +12,13 @@ public struct BackendConfig: Sendable {
         self.port = port
         self.useTLS = useTLS
     }
+
+    /// Parses "host:port".
+    public init?(parsing spec: String, useTLS: Bool = true) {
+        let parts = spec.split(separator: ":", omittingEmptySubsequences: false)
+        guard parts.count == 2, !parts[0].isEmpty, let port = Int(parts[1]) else { return nil }
+        self.init(host: String(parts[0]), port: port, useTLS: useTLS)
+    }
 }
 
 /// One long-lived HTTP/2 connection to the backend, shared by every service and

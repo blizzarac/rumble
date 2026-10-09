@@ -68,4 +68,14 @@ import RumbleServices
         #expect(mapRPCError(RPCError(code: .notFound, message: "x")) as? ServiceError == .notFound("x"))
         #expect(mapRPCError(RPCError(code: .internalError, message: "boom")) as? ServiceError == .failed("boom"))
     }
+
+    @Test func backendSpecParsing() {
+        let config = BackendConfig(parsing: "api.example.com:443")
+        #expect(config?.host == "api.example.com")
+        #expect(config?.port == 443)
+        #expect(config?.useTLS == true)
+        #expect(BackendConfig(parsing: "nope") == nil)
+        #expect(BackendConfig(parsing: ":443") == nil)
+        #expect(BackendConfig(parsing: "host:abc") == nil)
+    }
 }

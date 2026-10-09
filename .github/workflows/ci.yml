@@ -22,9 +22,11 @@ jobs:
   app:
     name: Build app (iOS Simulator)
     runs-on: macos-15
+    env:
+      PROTOC_PATH: /opt/homebrew/bin/protoc
     steps:
       - uses: actions/checkout@v4
-      - run: brew install xcodegen
+      - run: brew install xcodegen protobuf
       - run: xcodegen generate
       - name: Build
         run: |
@@ -33,18 +35,21 @@ jobs:
             -project Rumble.xcodeproj \
             -scheme Rumble \
             -destination 'generic/platform=iOS Simulator' \
+            -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO
 
   ui-tests:
     name: UI tests (${{ matrix.family }})
     runs-on: macos-15
+    env:
+      PROTOC_PATH: /opt/homebrew/bin/protoc
     strategy:
       fail-fast: false
       matrix:
         family: [iPhone, iPad]
     steps:
       - uses: actions/checkout@v4
-      - run: brew install xcodegen
+      - run: brew install xcodegen protobuf
       - run: xcodegen generate
       - name: Pick a simulator
         id: sim
@@ -69,6 +74,7 @@ jobs:
             -project Rumble.xcodeproj \
             -scheme Rumble \
             -destination 'id=${{ steps.sim.outputs.udid }}' \
+            -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO
 
   proto:

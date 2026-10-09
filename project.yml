@@ -12,7 +12,7 @@ packages:
   RumbleUI: { path: Packages/RumbleUI }
   RumbleState: { path: Packages/RumbleState }
   RumbleServices: { path: Packages/RumbleServices }
-  # Add once the gRPC adapters exist: RumbleProto: { path: Packages/RumbleProto }
+  RumbleProto: { path: Packages/RumbleProto }
 targets:
   Rumble:
     type: application
@@ -22,6 +22,7 @@ targets:
       - package: RumbleUI
       - package: RumbleState
       - package: RumbleServices
+      - package: RumbleProto
       - target: RumbleWidgets
     info:
       path: Rumble/Info.plist

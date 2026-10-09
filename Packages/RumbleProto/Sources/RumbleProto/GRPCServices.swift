@@ -8,12 +8,15 @@ struct GRPCDeckService: DeckService {
     /// Server streaming: cards arrive as the backend picks them.
     func streamDeck(mode: DeckMode) -> AsyncThrowingStream<Dish, Error> {
         let backend = backend
+        let request: Rumble_V1_DeckRequest = {
+            var request = Rumble_V1_DeckRequest()
+            request.mode = Rumble_V1_DeckMode(mode)
+            request.limit = 20
+            return request
+        }()
         return AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    var request = Rumble_V1_DeckRequest()
-                    request.mode = Rumble_V1_DeckMode(mode)
-                    request.limit = 20
                     try await backend.authenticated { metadata in
                         let client = Rumble_V1_DeckService.Client(wrapping: backend.client)
                         try await client.streamDeck(request, metadata: metadata) { response in
@@ -45,9 +48,12 @@ struct GRPCRecipeService: RecipeService {
     let backend: GRPCBackend
 
     func recipe(id: String) async throws -> Recipe {
-        var request = Rumble_V1_RecipeId()
-        request.id = id
-        return try await backend.unary { [request] metadata in
+        let request: Rumble_V1_RecipeId = {
+            var request = Rumble_V1_RecipeId()
+            request.id = id
+            return request
+        }()
+        return try await backend.unary { metadata in
             let client = Rumble_V1_RecipeService.Client(wrapping: backend.client)
             return Recipe(try await client.getRecipe(request, metadata: metadata))
         }
@@ -58,18 +64,24 @@ struct GRPCPlanService: PlanService {
     let backend: GRPCBackend
 
     func buildPlan(dishIDs: [String]) async throws -> Plan {
-        var request = Rumble_V1_PlanRequest()
-        request.dishIds = dishIDs
-        return try await backend.unary { [request] metadata in
+        let request: Rumble_V1_PlanRequest = {
+            var request = Rumble_V1_PlanRequest()
+            request.dishIds = dishIDs
+            return request
+        }()
+        return try await backend.unary { metadata in
             let client = Rumble_V1_PlanService.Client(wrapping: backend.client)
             return Plan(try await client.buildPlan(request, metadata: metadata))
         }
     }
 
     func shoppingList(planID: String) async throws -> ShoppingList {
-        var request = Rumble_V1_PlanId()
-        request.id = planID
-        return try await backend.unary { [request] metadata in
+        let request: Rumble_V1_PlanId = {
+            var request = Rumble_V1_PlanId()
+            request.id = planID
+            return request
+        }()
+        return try await backend.unary { metadata in
             let client = Rumble_V1_PlanService.Client(wrapping: backend.client)
             return ShoppingList(try await client.getShoppingList(request, metadata: metadata))
         }

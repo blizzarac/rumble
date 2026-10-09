@@ -80,10 +80,10 @@ jobs:
       - name: Build
         working-directory: Packages/RumbleProto
         # The build plugin only runs protoc from PROTOC_PATH.
-        run: PROTOC_PATH=$(which protoc) swift build
+        run: PROTOC_PATH=$(which protoc) swift build -Xswiftc -suppress-warnings
       - name: Test
         working-directory: Packages/RumbleProto
-        run: PROTOC_PATH=$(which protoc) swift test
+        run: PROTOC_PATH=$(which protoc) swift test -Xswiftc -suppress-warnings
       - name: Show generated API (for writing the adapters)
         if: always()
         working-directory: Packages/RumbleProto

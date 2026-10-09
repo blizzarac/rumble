@@ -17,41 +17,62 @@ Layers only talk downwards: views → stores → services → proto. Only the se
 
 ## Status
 
-Written on a Linux machine with **no Swift toolchain, so none of it has been compiled or run yet**. Expect a round of small compile fixes (Swift 6 strict concurrency especially).
+Written without a Swift toolchain on the machine, then **compiled and tested on GitHub Actions (macOS runner, Xcode 16.4)**: every push builds the packages and the app, runs the unit tests, and runs the UI tests on an iPhone and an iPad simulator. Check the latest run before trusting this list.
 
 Done:
 - All four packages, the app target, a widget extension and the XcodeGen spec
-- GitHub Actions CI on macOS (package tests, app build for the simulator, proto generation), so compile errors show up on every push
-- Live Activity for running cooking timers (Lock Screen and Dynamic Island), mirrored from `CookingStore`
-- Auth plumbing: `AuthSession` (token refresh shared between concurrent callers, keychain store), `withDeadline` (2 s swipes, 5 s other calls), and `CallPipeline` combining auth, deadline and retry for the gRPC adapters to use
-- SwiftData persistence for the pantry, recipe cache, shopping list and swipe queue (swipes survive a relaunch and are sent on the next start)
-- Cook flow end to end on fake data: swipe deck → match → step-by-step cooking → pantry updated
+- Cook flow end to end: swipe deck → match → step-by-step cooking → pantry updated
 - Shop flow: swipe three dinners → shopping list → tick items → pantry filled
-- Retry with exponential backoff, offline swipe outbox, iPad layouts, keyboard shortcuts, VoiceOver actions
-- Unit tests (Swift Testing) for services and stores
+- iPad layouts, keyboard shortcuts, VoiceOver actions, haptics
+- Live Activity for running cooking timers (Lock Screen and Dynamic Island), mirrored from `CookingStore`
+- Local notifications when a timer ends
+- SwiftData persistence: pantry, recipe cache, shopping list, swipe queue (swipes survive a relaunch and are sent on the next start)
+- Image cache (URLSession memory + disk, shared downloads, prefetch for upcoming cards)
+- Auth plumbing: `AuthSession` (token refresh shared between concurrent callers, keychain store), `withDeadline` (2 s swipes, 5 s other calls), `CallPipeline` combining auth, deadline and retry
+- gRPC adapters over the generated clients (`RumbleProto`): deck (server streaming), recipes, plans, pantry sync (bidirectional streaming), status codes mapped onto `ServiceError`, keepalive pings
+- Unit tests (Swift Testing) for services, stores and the wire mapping; UI tests for the two core flows
+- Placeholder app icon
 
 Not done:
-- **gRPC adapters.** `RumbleProto` has the sketch protos and plugin setup but nothing implements `DeckService` etc. on top of it yet. The app runs on the fakes.
-- The gRPC interceptor that puts `AuthSession`'s token in call metadata, and keepalive pings (every ~30 s)
-- A real sign-in flow and `TokenRefresher` (token type and lifetime still to agree with the backend)
-- Image cache (URLSession + disk), "record as cooked" / taste profile, bidirectional pantry sync
-- App icon, real bundle identifier and signing team
-- UI tests for the two core flows
+- A real sign-in flow and `TokenRefresher` (token type and lifetime still to agree with the backend). For now the token comes from `RUMBLE_TOKEN`
+- Pantry stays local: the sync semantics (full state vs changes) are not agreed, so `GRPCPantryService` exists but is not used by the app
+- Record a finished dish as cooked / taste profile
+- Blurred image placeholders from `image_placeholder`
+- Real bundle identifier, signing team and app icon artwork
+- Integration tests against a real or in-process gRPC server
+
+## Running against a backend
+
+By default the app uses fake services with sample data. To use the gRPC adapters for the deck, recipes and plans, set these environment variables in the Xcode scheme:
+
+| Variable | Meaning |
+| --- | --- |
+| `RUMBLE_BACKEND` | `host:port` of the gRPC server |
+| `RUMBLE_TOKEN` | access token sent as `authorization: Bearer …` |
+| `RUMBLE_TLS` | set to `0` for a plaintext dev server (TLS otherwise) |
 
 ## On the Mac
 
 ```sh
-brew install xcodegen protobuf
+brew install xcodegen protobuf   # protobuf: the gRPC plugin needs protoc; set PROTOC_PATH=$(which protoc) when building outside CI
 # 1. Check the packages build and the tests pass
-# (or just push: CI runs the same checks and reports compile errors)
 for p in RumbleServices RumbleState; do (cd Packages/$p && swift test); done
 # 2. Check the proto package resolves and generates (verifies package versions and the plugin config)
 (cd Packages/RumbleProto && PROTOC_PATH=$(which protoc) swift build)
-# 3. Generate and open the app
-xcodegen generate && open Rumble.xcodeproj
+# 3. Generate the Xcode project
+xcodegen generate
+# 4. Xcode only sees PROTOC_PATH if it is set for the GUI session, then restart Xcode and open the project
+launchctl setenv PROTOC_PATH "$(which protoc)"
+open Rumble.xcodeproj
 ```
 
-Things to double-check against current releases: the grpc-swift-2 / grpc-swift-protobuf / nio-transport version ranges and product names in `RumbleProto/Package.swift`, the `visibility` key in `grpc-swift-proto-generator-config.json`, and the `@ModelActor` init visibility in `SwiftDataPantry.swift`.
+On the first build Xcode asks to trust the `GRPCProtobufGenerator` build plugin. Set your team and a real bundle identifier (`project.yml`, three targets: app, widgets, UI tests) before running on a device. The Live Activity needs a real device or a recent simulator.
+
+Notes from getting it to build in CI:
+- The generated gRPC types are `internal` (the `visibility` key in `grpc-swift-proto-generator-config.json` has no effect), so the adapters live inside the `RumbleProto` target and nothing else sees `Rumble_V1_*`.
+- The plugin only runs `protoc` from `PROTOC_PATH`.
+- The grpc-swift 2 repository is `github.com/grpc/grpc-swift` (the old `grpc-swift-2` URL collides with it).
+- The generated code produces many deprecation warnings (grpc-swift is moving types around); CI builds the proto package with `-suppress-warnings`.
 
 ## Open questions
 

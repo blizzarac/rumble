@@ -65,3 +65,15 @@ jobs:
         working-directory: Packages/RumbleProto
         # The build plugin only runs protoc from PROTOC_PATH.
         run: PROTOC_PATH=$(which protoc) swift build
+      - name: Show generated API (for writing the adapters)
+        if: always()
+        working-directory: Packages/RumbleProto
+        run: |
+          for f in $(find .build -name '*.grpc.swift' | head -3); do
+            echo "=== $f"
+            grep -nE '^\s*(public )?(protocol|struct|extension|enum|typealias) |^\s*(public )?(static )?(func|var|let|init)\b' "$f" | grep -vE 'internal|private' | head -150
+          done
+          for f in $(find .build -name '*.pb.swift' | head -2); do
+            echo "=== $f"
+            grep -nE '^(public )?(struct|enum) ' "$f" | head -60
+          done
